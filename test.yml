@@ -1,0 +1,10 @@
+---
+- name: Test Var
+  hosts: localhost
+  connection: local
+  gather_facts: True
+  tasks:
+
+    - name: check name
+      debug:
+        var: ansible_facts["all_ipv4_addresses"]
