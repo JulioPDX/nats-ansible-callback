@@ -8,17 +8,40 @@ from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
 DOCUMENTATION = '''
-    author: JulioPDX
+    author: JulioPDX & Ansible Team
     name: nats
     type: stdout
     short_description: yaml-ized Ansible screen output also sends to NATS bus
     description:
         - Ansible output that can be quite a bit easier to read than the
-          default JSON formatting. Also adds output to NATS bus
+          default JSON formatting. Also adds output to NATS bus.
     extends_documentation_fragment:
       - default_callback
     requirements:
       - set as stdout in configuration
+    options:
+      nats_url:
+        description:
+          - URL of the NATS server, for example, 0.0.0.0:4222.
+        default: 0.0.0.0:4222
+        env:
+          - name: NATS_URL
+          - name: NATS_SERVER_URL
+          - name: NATS_SERVER
+        required: True
+        ini:
+          - section: callback_nats
+            key: nats_url
+      nats_subject:
+        description:
+          - Subject where to publish message.
+        default: ansible.output
+        env:
+          - name: NATS_SUBJECT
+        required: True
+        ini:
+          - section: callback_nats
+            key: nats_subject
 '''
 
 import yaml
@@ -77,12 +100,19 @@ class CallbackModule(Default):
     of JSON for printing results.
     """
 
-    CALLBACK_VERSION = 0.1
+    CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = 'stdout'
     CALLBACK_NAME = 'nats'
 
     def __init__(self):
         super(CallbackModule, self).__init__()
+
+    def set_options(self, task_keys=None, var_options=None, direct=None):
+
+        super(CallbackModule, self).set_options(task_keys=task_keys, var_options=var_options, direct=direct)
+
+        self.nats_url = self.get_option('nats_url')
+        self.nats_subject = self.get_option('nats_subject')
 
     def _dump_results(self, result, indent=None, sort_keys=True, keep_invocation=False):
         if result.get('_ansible_no_log', False):
@@ -129,8 +159,8 @@ class CallbackModule(Default):
         # indent by a couple of spaces
         dumped = '\n  '.join(dumped.split('\n')).rstrip()
         async def nats_mesage():
-            nc = await nats.connect("0.0.0.0:4222")
-            await nc.publish("ansible.output", bytes(dumped, encoding="utf-8"))
+            nc = await nats.connect(self.nats_url)
+            await nc.publish(self.nats_subject, bytes(dumped, encoding="utf-8"))
         asyncio.run(nats_mesage())
         return dumped
 
